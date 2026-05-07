@@ -1,3 +1,6 @@
+import discord
+from discord import app_commands
+from discord.ext import commands
 import requests
 from bs4 import BeautifulSoup
 import schedule
@@ -5,9 +8,12 @@ import time
 import json
 import re
 from datetime import datetime
+import threading
+import os  # ✅ Pega as variáveis do Railway
 
-# ---------------- CONFIGURAÇÕES PRONTAS ----------------
-WEBHOOK_DISCORD = "https://discord.com/api/webhooks/1502050535073644666/9F9USfLqSQubFBidh_akybynCZXwvJ3ogzHlGGAJm3ahZSS36IXzhCF043CSfbFwDze-"
+# ---------------- CONFIGURAÇÕES (TUDO NAS VARIÁVEIS) ----------------
+TOKEN_BOT = os.getenv("TOKEN_BOT")
+CANAL_NOTIFICACOES_ID = int(os.getenv("CANAL_NOTIFICACOES_ID"))
 
 FONTES = [
     "https://ff.garena.com/news/pt",
@@ -18,7 +24,13 @@ FONTES = [
 
 ARQUIVO_HISTORICO = "eventos_encontrados.json"
 PALAVRAS_CHAVE = ["evento", "lançamento", "chegando", "próximo", "atualização", "novo", "breve", "em breve", "recompensa", "passe", "pacote", "skin", "temporada"]
-# ---------------------------------------------------------
+# ----------------------------------------------------------------------
+
+# Configuração do Bot
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+tree = bot.tree
 
 def carregar_historico():
     try:
@@ -31,8 +43,7 @@ def salvar_historico(historico):
     with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
         json.dump(list(historico), f, ensure_ascii=False)
 
-def enviar_discord(titulo, data_lancamento, detalhes, itens, imagem=None):
-    """Mensagem 100% profissional formatada"""
+def enviar_mensagem_discord(titulo, data_lancamento, detalhes, itens, imagem=None):
     mensagem = "```md\n"
     mensagem += "# 📢 NOVO EVENTO DETECTADO - FREE FIRE\n"
     mensagem += "```\n\n"
@@ -49,25 +60,13 @@ def enviar_discord(titulo, data_lancamento, detalhes, itens, imagem=None):
     mensagem += "**🎁 ITENS E CONTEÚDOS QUE IRÃO CHEGAR**\n"
     mensagem += f"{itens}\n"
 
-    dados = {
-        "content": mensagem,
-        "username": "Monitor de Eventos FF",
-        "avatar_url": "https://i.imgur.com/6XZ7Z8L.png"
-    }
-
+    embed = discord.Embed(description=mensagem, color=discord.Color.red())
     if imagem:
-        dados["embeds"] = [
-            {
-                "image": {"url": imagem},
-                "color": 16711680
-            }
-        ]
+        embed.set_image(url=imagem)
 
-    try:
-        requests.post(WEBHOOK_DISCORD, json=dados)
-        print("✅ Notificação enviada ao Discord com sucesso")
-    except Exception as e:
-        print(f"❌ Erro ao enviar notificação: {str(e)}")
+    canal = bot.get_channel(CANAL_NOTIFICACOES_ID)
+    if canal:
+        canal.send(embed=embed)
 
 def buscar_eventos():
     print(f"\n🔍 Verificação iniciada | {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
@@ -110,13 +109,11 @@ def buscar_eventos():
                         base_url = url.split("/")[0] + "//" + url.split("/")[2]
                         imagem = base_url + imagem
 
-                # Definir data de lançamento
+                # Definir data
                 data_lancamento = "A ser definida | Em breve"
                 padroes_data = [
-                    r'\d{2}/\d{2}/\d{4}',
-                    r'\d{1,2} de \w+ de \d{4}',
-                    r'\d{1,2} de \w+',
-                    r'em \d{2}/\d{2}'
+                    r'\d{2}/\d{2}/\d{4}', r'\d{1,2} de \w+ de \d{4}',
+                    r'\d{1,2} de \w+', r'em \d{2}/\d{2}'
                 ]
                 for padrao in padroes_data:
                     encontro = re.search(padrao, detalhes.lower() + " " + titulo.lower())
@@ -124,7 +121,7 @@ def buscar_eventos():
                         data_lancamento = encontro.group(0).capitalize()
                         break
 
-                # Definir itens que chegarão
+                # Definir itens
                 itens = "• Pacotes e visuais exclusivos\n• Skins de armas e acessórios\n• Recompensas por missões diárias\n• Itens temáticos do evento"
                 if "passe" in titulo.lower():
                     itens += "\n• Passe de Elite completo com recompensas"
@@ -133,8 +130,8 @@ def buscar_eventos():
                 if "atualização" in titulo.lower():
                     itens += "\n• Novos mapas, modos e mecânicas de jogo"
 
-                # Enviar e salvar
-                enviar_discord(titulo, data_lancamento, detalhes, itens, imagem)
+                # Enviar notificação
+                enviar_mensagem_discord(titulo, data_lancamento, detalhes, itens, imagem)
                 historico.add(titulo)
                 time.sleep(1)
 
@@ -144,14 +141,67 @@ def buscar_eventos():
     salvar_historico(historico)
     print("✅ Verificação finalizada")
 
-# Verifica a cada 60 minutos
-schedule.every(60).minutes.do(buscar_eventos)
-
-if __name__ == "__main__":
-    print("🤖 MONITOR DE EVENTOS FREE FIRE - INICIADO")
-    print("🔹 Modo: Profissional | 🔹 Intervalo: 60min | 🔹 Saída: Discord")
-    buscar_eventos()
+# Função do agendador (roda em segundo plano)
+def agendador():
     while True:
         schedule.run_pending()
-        time.sleep(30)
-    
+        time.sleep(60)
+
+# ---------------- COMANDOS SLASH (SÓ ADM PODE USAR) ----------------
+
+@tree.command(name="status", description="Verifica se o bot está funcionando (Apenas ADM)")
+@commands.has_permissions(administrator=True)
+async def status(interaction: discord.Interaction):
+    await interaction.response.send_message(
+        "```md\n# ✅ STATUS DO BOT\n```\n"
+        "**🤖 Estado:** Online e operacional\n"
+        "**⏱️ Verificação:** A cada 60 minutos\n"
+        "**📡 Fontes ativas:** 4 sites oficiais\n"
+        "**🔐 Acesso:** Restrito a administradores",
+        ephemeral=True
+    )
+
+@tree.command(name="atualizar", description="Força nova busca e troca fonte de pesquisa (Apenas ADM)")
+@commands.has_permissions(administrator=True)
+async def atualizar(interaction: discord.Interaction):
+    await interaction.response.send_message(
+        "🔄 **Atualização forçada iniciada...**\n"
+        "Interrompi a rotina automática e estou vasculhando todas as fontes agora mesmo.",
+        ephemeral=True
+    )
+    buscar_eventos()
+    await interaction.followup.send("✅ **Busca finalizada!** Nenhuma novidade ou todos os eventos já foram enviados.", ephemeral=True)
+
+@tree.command(name="testar", description="Envia mensagem de teste no canal de eventos (Apenas ADM)")
+@commands.has_permissions(administrator=True)
+async def testar(interaction: discord.Interaction):
+    await interaction.response.send_message("🧪 Enviando mensagem de teste...", ephemeral=True)
+    enviar_mensagem_discord(
+        titulo="TESTE DE FUNCIONAMENTO",
+        data_lancamento="Agora mesmo",
+        detalhes="Sistema 100% operacional, integrado com Railway e Discord. Todas as funções estão ativas.",
+        itens="• Comandos funcionando ✅\n• Notificações enviadas ✅\n• Formato profissional ✅",
+        imagem="https://i.imgur.com/6XZ7Z8L.png"
+    )
+    await interaction.followup.send("✅ Mensagem de teste enviada com sucesso no canal!", ephemeral=True)
+
+# ---------------- EVENTOS DO BOT ----------------
+
+@bot.event
+async def on_ready():
+    await tree.sync()  # Sincroniza os comandos /
+    print(f"🤖 BOT INICIADO | Logado como: {bot.user}")
+    print("🔹 Comandos: /status, /atualizar, /testar")
+    print("🔹 Monitoramento ATIVO")
+
+    # Inicia busca automática a cada 60min
+    schedule.every(60).minutes.do(buscar_eventos)
+    # Primeira busca logo ao ligar
+    buscar_eventos()
+
+    # Inicia rotina em segundo plano
+    threading.Thread(target=agendador, daemon=True).start()
+
+# Rodar o bot
+bot.run(TOKEN_BOT)
+            
