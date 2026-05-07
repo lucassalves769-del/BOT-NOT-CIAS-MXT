@@ -193,4 +193,4 @@ if __name__ == "__main__":
     buscar_eventos()
     threading.Thread(target=agendador, daemon=True).start()
     threading.Thread(target=verificar_comandos, daemon=True).start()
-                
+    
