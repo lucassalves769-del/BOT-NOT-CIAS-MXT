@@ -9,9 +9,9 @@ import json
 import re
 from datetime import datetime
 import threading
-import os  # ✅ Pega as variáveis do Railway
+import os
 
-# ---------------- CONFIGURAÇÕES (TUDO NAS VARIÁVEIS) ----------------
+# ---------------- CONFIGURAÇÕES (VARIÁVEIS RAILWAY) ----------------
 TOKEN_BOT = os.getenv("TOKEN_BOT")
 CANAL_NOTIFICACOES_ID = int(os.getenv("CANAL_NOTIFICACOES_ID"))
 
@@ -26,7 +26,6 @@ ARQUIVO_HISTORICO = "eventos_encontrados.json"
 PALAVRAS_CHAVE = ["evento", "lançamento", "chegando", "próximo", "atualização", "novo", "breve", "em breve", "recompensa", "passe", "pacote", "skin", "temporada"]
 # ----------------------------------------------------------------------
 
-# Configuração do Bot
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -44,21 +43,11 @@ def salvar_historico(historico):
         json.dump(list(historico), f, ensure_ascii=False)
 
 def enviar_mensagem_discord(titulo, data_lancamento, detalhes, itens, imagem=None):
-    mensagem = "```md\n"
-    mensagem += "# 📢 NOVO EVENTO DETECTADO - FREE FIRE\n"
-    mensagem += "```\n\n"
-
-    mensagem += "**📌 TÍTULO DO EVENTO**\n"
-    mensagem += f"{titulo}\n\n"
-
-    mensagem += "**📅 DATA DE LANÇAMENTO**\n"
-    mensagem += f"{data_lancamento}\n\n"
-
-    mensagem += "**📝 DETALHES DO EVENTO**\n"
-    mensagem += f"{detalhes}\n\n"
-
-    mensagem += "**🎁 ITENS E CONTEÚDOS QUE IRÃO CHEGAR**\n"
-    mensagem += f"{itens}\n"
+    mensagem = "```md\n# 📢 NOVO EVENTO DETECTADO - FREE FIRE\n```\n\n"
+    mensagem += f"**📌 TÍTULO DO EVENTO**\n{titulo}\n\n"
+    mensagem += f"**📅 DATA DE LANÇAMENTO**\n{data_lancamento}\n\n"
+    mensagem += f"**📝 DETALHES DO EVENTO**\n{detalhes}\n\n"
+    mensagem += f"**🎁 ITENS E CONTEÚDOS QUE IRÃO CHEGAR**\n{itens}"
 
     embed = discord.Embed(description=mensagem, color=discord.Color.red())
     if imagem:
@@ -74,11 +63,7 @@ def buscar_eventos():
 
     for url in FONTES:
         try:
-            resposta = requests.get(
-                url,
-                timeout=15,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, como Gecko) Chrome/120.0.0.0 Safari/537.36"}
-            )
+            resposta = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             if resposta.status_code != 200:
                 continue
 
@@ -89,119 +74,85 @@ def buscar_eventos():
                 titulo_tag = artigo.find(["h2", "h3", "a"])
                 titulo = titulo_tag.get_text(strip=True) if titulo_tag else "Evento sem identificação"
 
-                if titulo in historico:
+                if titulo in historico or not any(p in titulo.lower() for p in PALAVRAS_CHAVE):
                     continue
 
-                if not any(palavra in titulo.lower() for palavra in PALAVRAS_CHAVE):
-                    continue
-
-                # Extrair detalhes
                 detalhes_tag = artigo.find("p")
-                detalhes = detalhes_tag.get_text(strip=True) if detalhes_tag else "Informações detalhadas serão divulgadas em breve."
+                detalhes = detalhes_tag.get_text(strip=True) if detalhes_tag else "Informações detalhadas em breve."
                 detalhes = detalhes[:400] + "..." if len(detalhes) > 400 else detalhes
 
-                # Extrair imagem
                 imagem = None
                 imagem_tag = artigo.find("img")
                 if imagem_tag and imagem_tag.get("src"):
                     imagem = imagem_tag["src"]
                     if imagem.startswith("/"):
-                        base_url = url.split("/")[0] + "//" + url.split("/")[2]
-                        imagem = base_url + imagem
+                        base = url.split("/")[0] + "//" + url.split("/")[2]
+                        imagem = base + imagem
 
-                # Definir data
                 data_lancamento = "A ser definida | Em breve"
-                padroes_data = [
-                    r'\d{2}/\d{2}/\d{4}', r'\d{1,2} de \w+ de \d{4}',
-                    r'\d{1,2} de \w+', r'em \d{2}/\d{2}'
-                ]
-                for padrao in padroes_data:
-                    encontro = re.search(padrao, detalhes.lower() + " " + titulo.lower())
-                    if encontro:
-                        data_lancamento = encontro.group(0).capitalize()
+                padroes = [r'\d{2}/\d{2}/\d{4}', r'\d{1,2} de \w+', r'em \d{2}/\d{2}']
+                for p in padroes:
+                    m = re.search(p, detalhes.lower() + " " + titulo.lower())
+                    if m:
+                        data_lancamento = m.group(0).capitalize()
                         break
 
-                # Definir itens
-                itens = "• Pacotes e visuais exclusivos\n• Skins de armas e acessórios\n• Recompensas por missões diárias\n• Itens temáticos do evento"
-                if "passe" in titulo.lower():
-                    itens += "\n• Passe de Elite completo com recompensas"
-                if "parceria" in titulo.lower() or "colaboração" in titulo.lower():
-                    itens += "\n• Conteúdos exclusivos da parceria especial"
-                if "atualização" in titulo.lower():
-                    itens += "\n• Novos mapas, modos e mecânicas de jogo"
+                itens = "• Pacotes e visuais exclusivos\n• Skins de armas e acessórios\n• Recompensas diárias\n• Itens temáticos"
+                if "passe" in titulo.lower(): itens += "\n• Passe de Elite completo"
+                if "parceria" in titulo.lower(): itens += "\n• Conteúdos de parceria especial"
+                if "atualização" in titulo.lower(): itens += "\n• Novos modos/mapas"
 
-                # Enviar notificação
                 enviar_mensagem_discord(titulo, data_lancamento, detalhes, itens, imagem)
                 historico.add(titulo)
                 time.sleep(1)
 
         except Exception as e:
-            print(f"⚠️ Falha ao consultar {url}: {str(e)}")
+            print(f"⚠️ Erro {url}: {str(e)}")
 
     salvar_historico(historico)
     print("✅ Verificação finalizada")
 
-# Função do agendador (roda em segundo plano)
 def agendador():
     while True:
         schedule.run_pending()
         time.sleep(60)
 
-# ---------------- COMANDOS SLASH (SÓ ADM PODE USAR) ----------------
-
-@tree.command(name="status", description="Verifica se o bot está funcionando (Apenas ADM)")
+# ---------------- COMANDOS (SÓ ADM) ----------------
+@tree.command(name="status", description="Verifica se o bot está online (ADM)")
 @commands.has_permissions(administrator=True)
 async def status(interaction: discord.Interaction):
     await interaction.response.send_message(
-        "```md\n# ✅ STATUS DO BOT\n```\n"
-        "**🤖 Estado:** Online e operacional\n"
-        "**⏱️ Verificação:** A cada 60 minutos\n"
-        "**📡 Fontes ativas:** 4 sites oficiais\n"
-        "**🔐 Acesso:** Restrito a administradores",
+        "```md\n# ✅ STATUS DO BOT\n```\n**🤖 Online | ⏱️ Verificação: 60min | 📡 Fontes: 4 | 🔐 Acesso: ADM**",
         ephemeral=True
     )
 
-@tree.command(name="atualizar", description="Força nova busca e troca fonte de pesquisa (Apenas ADM)")
+@tree.command(name="atualizar", description="Força busca nova de eventos (ADM)")
 @commands.has_permissions(administrator=True)
 async def atualizar(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        "🔄 **Atualização forçada iniciada...**\n"
-        "Interrompi a rotina automática e estou vasculhando todas as fontes agora mesmo.",
-        ephemeral=True
-    )
+    await interaction.response.send_message("🔄 Atualização iniciada...", ephemeral=True)
     buscar_eventos()
-    await interaction.followup.send("✅ **Busca finalizada!** Nenhuma novidade ou todos os eventos já foram enviados.", ephemeral=True)
+    await interaction.followup.send("✅ Busca finalizada!", ephemeral=True)
 
-@tree.command(name="testar", description="Envia mensagem de teste no canal de eventos (Apenas ADM)")
+@tree.command(name="testar", description="Envia mensagem de teste (ADM)")
 @commands.has_permissions(administrator=True)
 async def testar(interaction: discord.Interaction):
-    await interaction.response.send_message("🧪 Enviando mensagem de teste...", ephemeral=True)
+    await interaction.response.send_message("🧪 Enviando teste...", ephemeral=True)
     enviar_mensagem_discord(
-        titulo="TESTE DE FUNCIONAMENTO",
-        data_lancamento="Agora mesmo",
-        detalhes="Sistema 100% operacional, integrado com Railway e Discord. Todas as funções estão ativas.",
-        itens="• Comandos funcionando ✅\n• Notificações enviadas ✅\n• Formato profissional ✅",
-        imagem="https://i.imgur.com/6XZ7Z8L.png"
+        "TESTE DE SISTEMA",
+        "Agora mesmo",
+        "Tudo funcionando perfeitamente, integrado com Railway e Discord.",
+        "• Comandos ✅\n• Notificações ✅\n• Formato Profissional ✅",
+        "https://i.imgur.com/6XZ7Z8L.png"
     )
-    await interaction.followup.send("✅ Mensagem de teste enviada com sucesso no canal!", ephemeral=True)
-
-# ---------------- EVENTOS DO BOT ----------------
+    await interaction.followup.send("✅ Mensagem enviada no canal!", ephemeral=True)
 
 @bot.event
 async def on_ready():
-    await tree.sync()  # Sincroniza os comandos /
-    print(f"🤖 BOT INICIADO | Logado como: {bot.user}")
-    print("🔹 Comandos: /status, /atualizar, /testar")
-    print("🔹 Monitoramento ATIVO")
-
-    # Inicia busca automática a cada 60min
+    await tree.sync()
+    print(f"🤖 BOT INICIADO: {bot.user}")
     schedule.every(60).minutes.do(buscar_eventos)
-    # Primeira busca logo ao ligar
     buscar_eventos()
-
-    # Inicia rotina em segundo plano
     threading.Thread(target=agendador, daemon=True).start()
 
-# Rodar o bot
 bot.run(TOKEN_BOT)
             
