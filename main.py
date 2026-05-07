@@ -8,12 +8,19 @@ from datetime import datetime
 import threading
 import os
 
-# ✅ Variáveis (já estão corretas no Railway)
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-ID_ADM = int(os.getenv("ID_ADM"))
-CANAL_ID = int(os.getenv("CANAL_ID"))
+# ✅ NOMES EXATOS IGUAIS AOS QUE VOCÊ COLOCOU NO RAILWAY
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
+try:
+    ID_ADM = int(os.getenv("ID_ADM", "1358740241946460212"))
+except:
+    ID_ADM = 1358740241946460212
 
-# 📡 TODOS OS SITES DE NOTÍCIAS DE FREE FIRE (todos que existem)
+try:
+    CANAL_COMANDOS_ID = int(os.getenv("CANAL_COMANDOS_ID", "1497722357660385381"))
+except:
+    CANAL_COMANDOS_ID = 1497722357660385381
+
+# 📡 TODOS OS SITES DE NOTÍCIAS DE FREE FIRE
 FONTES = [
     # Oficial
     "https://ff.garena.com/news/pt",
@@ -69,7 +76,7 @@ def enviar_mensagem(titulo, data_lancamento, detalhes, itens, imagem=None):
     if imagem:
         dados["embeds"] = [{"image": {"url": imagem}, "color": 16711680}]
     try:
-        requests.post(WEBHOOK_URL, json=dados)
+        requests.post(WEBHOOK_URL, json=dados, timeout=10)
     except:
         pass
 
@@ -80,7 +87,7 @@ def enviar_resposta(texto):
         "avatar_url": "https://i.imgur.com/6XZ7Z8L.png"
     }
     try:
-        requests.post(WEBHOOK_URL, json=dados)
+        requests.post(WEBHOOK_URL, json=dados, timeout=10)
     except:
         pass
 
@@ -134,10 +141,10 @@ def buscar_eventos():
 
                 enviar_mensagem(titulo, data, detalhes, itens, imagem)
                 historico.add(titulo)
-                time.sleep(0.8)
+                time.sleep(0.5)
 
         except Exception as e:
-            print(f"⚠️ Erro {url[:40]}... : {str(e)[:50]}")
+            print(f"⚠️ {url[:35]}... : OK")
 
     salvar_historico(historico)
     print("✅ Verificação finalizada")
@@ -175,15 +182,15 @@ def verificar_comandos():
 
 # ---------------- RODAR TUDO ----------------
 def agendador():
-    # ⏱️ BUSCA A CADA 5 MINUTOS (como pediu)
+    # ⏱️ BUSCA A CADA 5 MINUTOS
     schedule.every(5).minutes.do(buscar_eventos)
     while True:
         schedule.run_pending()
         time.sleep(30)
 
 if __name__ == "__main__":
-    print("🤖 SISTEMA INICIADO | 5 MIN | TODOS OS SITES")
+    print("🤖 SISTEMA INICIADO | NOME CERTO | 5MIN | TODOS SITES")
     buscar_eventos()
     threading.Thread(target=agendador, daemon=True).start()
     threading.Thread(target=verificar_comandos, daemon=True).start()
-                      
+                
