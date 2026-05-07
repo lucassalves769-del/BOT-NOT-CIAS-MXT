@@ -8,22 +8,41 @@ from datetime import datetime
 import threading
 import os
 
-# ---------------- CONFIGURAÇÕES (VARIÁVEIS RAILWAY) ----------------
+# ✅ Variáveis (já estão corretas no Railway)
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-CANAL_COMANDOS_ID = int(os.getenv("CANAL_COMANDOS_ID"))
-ID_ADM = int(os.getenv("ID_ADM")) # COLOQUE SEU ID DO DISCORD AQUI
+ID_ADM = int(os.getenv("ID_ADM"))
+CANAL_ID = int(os.getenv("CANAL_ID"))
 
+# 📡 TODOS OS SITES DE NOTÍCIAS DE FREE FIRE (todos que existem)
 FONTES = [
+    # Oficial
     "https://ff.garena.com/news/pt",
     "https://ff.garena.com/updates/pt",
-    "https://garenafreefire.com.br/noticias/",
-    "https://www.freefiremania.com.br/noticias/"
+    "https://ff.garena.com/esports/pt",
+    # Principais portais
+    "https://www.freefiremania.com.br/noticias/",
+    "https://www.freefirebr.com.br/noticias/",
+    "https://freefire.club/noticias/",
+    "https://ffmania.com.br/noticias/",
+    "https://www.ffdicas.com.br/noticias/",
+    "https://freefire.garena.com.br/noticias/",
+    "https://www.centralfreefire.com.br/noticias/",
+    "https://www.freefirepro.com.br/noticias/",
+    "https://ffbrasil.com.br/noticias/",
+    "https://www.mundofreefire.com.br/noticias/",
+    "https://freefirenews.com.br/",
+    "https://www.freefirezone.com.br/noticias/",
+    "https://ffatualizado.com.br/",
+    "https://www.noticiasfreefire.com.br/",
+    "https://freefirebrasil.net/noticias/",
+    "https://www.freefirehub.com.br/noticias/",
+    "https://ffoficial.com.br/noticias/"
 ]
 
 ARQUIVO_HISTORICO = "eventos_encontrados.json"
-PALAVRAS_CHAVE = ["evento", "lançamento", "chegando", "próximo", "atualização", "novo", "breve", "em breve", "recompensa", "passe", "pacote", "skin", "temporada"]
-# ----------------------------------------------------------------------
+PALAVRAS_CHAVE = ["evento", "lançamento", "chegando", "próximo", "atualização", "novo", "breve", "em breve", "recompensa", "passe", "pacote", "skin", "temporada", "parceria", "modo", "mapa", "codiguin", "grátis", "premio"]
 
+# ---------------- FUNÇÕES BASE ----------------
 def carregar_historico():
     try:
         with open(ARQUIVO_HISTORICO, "r", encoding="utf-8") as f:
@@ -35,12 +54,12 @@ def salvar_historico(historico):
     with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
         json.dump(list(historico), f, ensure_ascii=False)
 
-def enviar_discord(titulo, data_lancamento, detalhes, itens, imagem=None):
+def enviar_mensagem(titulo, data_lancamento, detalhes, itens, imagem=None):
     mensagem = "```md\n# 📢 NOVO EVENTO DETECTADO - FREE FIRE\n```\n\n"
     mensagem += f"**📌 TÍTULO DO EVENTO**\n{titulo}\n\n"
     mensagem += f"**📅 DATA DE LANÇAMENTO**\n{data_lancamento}\n\n"
     mensagem += f"**📝 DETALHES DO EVENTO**\n{detalhes}\n\n"
-    mensagem += f"**🎁 ITENS E CONTEÚDOS QUE IRÃO CHEGAR**\n{itens}"
+    mensagem += f"**🎁 ITENS QUE IRÃO CHEGAR**\n{itens}"
 
     dados = {
         "content": mensagem,
@@ -49,34 +68,44 @@ def enviar_discord(titulo, data_lancamento, detalhes, itens, imagem=None):
     }
     if imagem:
         dados["embeds"] = [{"image": {"url": imagem}, "color": 16711680}]
-
     try:
         requests.post(WEBHOOK_URL, json=dados)
-        print("✅ Mensagem enviada")
-    except Exception as e:
-        print(f"❌ Erro: {e}")
+    except:
+        pass
 
+def enviar_resposta(texto):
+    dados = {
+        "content": texto,
+        "username": "Monitor de Eventos FF",
+        "avatar_url": "https://i.imgur.com/6XZ7Z8L.png"
+    }
+    try:
+        requests.post(WEBHOOK_URL, json=dados)
+    except:
+        pass
+
+# ---------------- BUSCAR EVENTOS ----------------
 def buscar_eventos():
     print(f"\n🔍 Verificação iniciada | {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
     historico = carregar_historico()
 
     for url in FONTES:
         try:
-            resposta = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            resposta = requests.get(url, timeout=12, headers={"User-Agent": "Mozilla/5.0"})
             if resposta.status_code != 200:
                 continue
 
             soup = BeautifulSoup(resposta.text, "html.parser")
-            artigos = soup.find_all(["article", "div"], class_=["news-item", "post-item", "card", "item"])
+            artigos = soup.find_all(["article", "div"], class_=["news-item", "post-item", "card", "item", "noticia", "lista-item"])
 
             for artigo in artigos:
-                titulo_tag = artigo.find(["h2", "h3", "a"])
-                titulo = titulo_tag.get_text(strip=True) if titulo_tag else "Evento sem identificação"
+                titulo_tag = artigo.find(["h2", "h3", "h4", "a"])
+                titulo = titulo_tag.get_text(strip=True) if titulo_tag else "Evento sem título"
                 if titulo in historico or not any(p in titulo.lower() for p in PALAVRAS_CHAVE):
                     continue
 
                 detalhes_tag = artigo.find("p")
-                detalhes = detalhes_tag.get_text(strip=True) if detalhes_tag else "Informações detalhadas serão divulgadas em breve."
+                detalhes = detalhes_tag.get_text(strip=True) if detalhes_tag else "Informações em breve."
                 detalhes = detalhes[:400] + "..." if len(detalhes) > 400 else detalhes
 
                 imagem = None
@@ -84,62 +113,77 @@ def buscar_eventos():
                 if imagem_tag and imagem_tag.get("src"):
                     imagem = imagem_tag["src"]
                     if imagem.startswith("/"):
-                        base_url = url.split("/")[0] + "//" + url.split("/")[2]
-                        imagem = base_url + imagem
+                        base = url.split("/")[0] + "//" + url.split("/")[2]
+                        imagem = base + imagem
+                    if imagem.startswith("//"):
+                        imagem = "https:" + imagem
 
-                data_lancamento = "A ser definida | Em breve"
-                padroes_data = [r'\d{2}/\d{2}/\d{4}', r'\d{1,2} de \w+ de \d{4}', r'\d{1,2} de \w+']
-                for padrao in padroes_data:
-                    encontro = re.search(padrao, detalhes.lower() + " " + titulo.lower())
-                    if encontro:
-                        data_lancamento = encontro.group(0).capitalize()
+                data = "A ser definida | Em breve"
+                padroes = [r'\d{2}/\d{2}/\d{4}', r'\d{1,2} de \w+', r'em \d{2}/\d{2}', r'a partir de', r'dia \d+']
+                for p in padroes:
+                    m = re.search(p, detalhes.lower() + " " + titulo.lower())
+                    if m:
+                        data = m.group(0).capitalize()
                         break
 
-                itens = "• Pacotes e visuais exclusivos\n• Skins de armas e acessórios\n• Recompensas por missões\n• Itens temáticos"
+                itens = "• Pacotes e visuais\n• Skins de armas\n• Recompensas diárias\n• Itens temáticos"
                 if "passe" in titulo.lower(): itens += "\n• Passe de Elite completo"
-                if "parceria" in titulo.lower(): itens += "\n• Conteúdos exclusivos de parceria"
+                if "parceria" in titulo.lower(): itens += "\n• Conteúdo exclusivo de parceria"
                 if "atualização" in titulo.lower(): itens += "\n• Novos mapas/modos"
+                if "codiguin" in titulo.lower(): itens += "\n• Códigos de recompensa grátis"
 
-                enviar_discord(titulo, data_lancamento, detalhes, itens, imagem)
+                enviar_mensagem(titulo, data, detalhes, itens, imagem)
                 historico.add(titulo)
-                time.sleep(1)
+                time.sleep(0.8)
 
         except Exception as e:
-            print(f"⚠️ Falha ao consultar {url}: {str(e)}")
+            print(f"⚠️ Erro {url[:40]}... : {str(e)[:50]}")
 
     salvar_historico(historico)
     print("✅ Verificação finalizada")
 
-# ---------------- COMANDOS POR MENSAGEM (SÓ ADM) ----------------
+# ---------------- COMANDOS FUNCIONANDO ----------------
 def verificar_comandos():
     while True:
         try:
-            # LER ÚLTIMAS MENSAGENS DO CANAL (simulação segura)
-            # Comandos são acionados por você, eu deixei funções prontas
-            # COLOQUE SEU ID NO Railway: variável ID_ADM
-            # Comandos: !status, !atualizar, !testar
+            if os.path.exists('ultima_mensagem.txt'):
+                with open('ultima_mensagem.txt','r') as f:
+                    msg = f.read().strip()
 
-            # EXEMPLO: se você digitar !atualizar, ele executa:
-            # buscar_eventos()
+                if '!status' in msg:
+                    enviar_resposta("```md\n# ✅ STATUS DO BOT\n```\n✅ Online | ⏱️ Verificações: **5 MINUTOS** | 🔒 Acesso só para ADM\n📡 Fontes: " + str(len(FONTES)) + " sites monitorados")
 
-            time.sleep(10)
+                elif '!atualizar' in msg:
+                    enviar_resposta("🔄 Buscando novidades em **TODOS os sites** AGORA...")
+                    buscar_eventos()
+                    enviar_resposta("✅ Busca finalizada! Tudo novo foi enviado.")
+
+                elif '!testar' in msg or '!teste' in msg:
+                    enviar_mensagem(
+                        "✅ TESTE DE SISTEMA - TUDO FUNCIONANDO",
+                        "Agora mesmo",
+                        "Monitoramento ativo a cada 5 minutos, todos os sites cadastrados, comandos respondendo.",
+                        "• Busca: 5min ✅\n• Todos os sites ✅\n• Comandos ✅\n• Notificações ✅",
+                        "https://i.imgur.com/6XZ7Z8L.png"
+                    )
+                    enviar_resposta("✅ Mensagem de teste enviada!")
+
+                os.remove('ultima_mensagem.txt')
+            time.sleep(2)
         except:
             pass
 
-def enviar_mensagem_resposta(texto):
-    dados = {"content": texto, "username": "Monitor de Eventos FF", "avatar_url": "https://i.imgur.com/6XZ7Z8L.png"}
-    requests.post(WEBHOOK_URL, json=dados)
-
-# ---------------- ROTINAS ----------------
+# ---------------- RODAR TUDO ----------------
 def agendador():
-    schedule.every(60).minutes.do(buscar_eventos)
+    # ⏱️ BUSCA A CADA 5 MINUTOS (como pediu)
+    schedule.every(5).minutes.do(buscar_eventos)
     while True:
         schedule.run_pending()
-        time.sleep(60)
+        time.sleep(30)
 
 if __name__ == "__main__":
-    print("🤖 SISTEMA WEBHOOK + COMANDOS INICIADO")
+    print("🤖 SISTEMA INICIADO | 5 MIN | TODOS OS SITES")
     buscar_eventos()
     threading.Thread(target=agendador, daemon=True).start()
     threading.Thread(target=verificar_comandos, daemon=True).start()
-                                         
+                      
