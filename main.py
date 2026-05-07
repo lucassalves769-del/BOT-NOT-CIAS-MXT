@@ -11,7 +11,7 @@ from datetime import datetime
 import threading
 import os
 
-# ✅ Variáveis do Railway
+# ✅ Variáveis Railway
 TOKEN_BOT = os.getenv("TOKEN_BOT")
 CANAL_ID = int(os.getenv("CANAL_NOTIFICACOES_ID"))
 
@@ -25,7 +25,7 @@ FONTES = [
 ARQUIVO_HISTORICO = "eventos.json"
 PALAVRAS = ["evento", "lançamento", "chegando", "atualização", "novo", "breve", "passe", "skin", "pacote"]
 
-# Configuração do Bot
+# Configuração
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -81,7 +81,6 @@ def buscar_eventos():
                 detalhes = detalhes_tag.get_text(strip=True) if detalhes_tag else "Informações em breve."
                 detalhes = detalhes[:400] + "..." if len(detalhes) > 400 else detalhes
 
-                # Imagem
                 imagem = None
                 img_tag = item.find("img")
                 if img_tag and img_tag.get("src"):
@@ -90,7 +89,6 @@ def buscar_eventos():
                         base = url.split("/")[0] + "//" + url.split("/")[2]
                         imagem = base + imagem
 
-                # Data
                 data = "A definir | Em breve"
                 padroes = [r'\d{2}/\d{2}/\d{4}', r'\d{1,2} de \w+', r'em \d{2}/\d{2}']
                 for p in padroes:
@@ -99,7 +97,6 @@ def buscar_eventos():
                         data = m.group(0).capitalize()
                         break
 
-                # Itens
                 itens = "• Pacotes e visuais\n• Skins de armas\n• Recompensas\n• Itens temáticos"
                 if "passe" in titulo.lower(): itens += "\n• Passe de Elite"
                 if "parceria" in titulo.lower(): itens += "\n• Conteúdo exclusivo de parceria"
@@ -120,7 +117,7 @@ def rodar_agendador():
         schedule.run_pending()
         time.sleep(60)
 
-# ---------------- COMANDOS (SÓ ADM) ----------------
+# ---------------- COMANDOS ----------------
 @tree.command(name="status", description="Verifica se o bot está online (ADM)")
 @commands.has_permissions(administrator=True)
 async def status(interaction: discord.Interaction):
@@ -153,12 +150,9 @@ async def testar(interaction: discord.Interaction):
 async def on_ready():
     await tree.sync()
     print(f"🤖 BOT CONECTADO: {bot.user}")
-    # Agendar verificação automática
     schedule.every(60).minutes.do(buscar_eventos)
-    # Primeira busca na hora
     buscar_eventos()
-    # Iniciar rotina em segundo plano
     threading.Thread(target=rodar_agendador, daemon=True).start()
 
 bot.run(TOKEN_BOT)
-            
+                
