@@ -4,70 +4,69 @@ from dotenv import load_dotenv
 import discord
 
 # ==================================================
-# 🤍 BOT REPASSADOR - TODOS PODEM USAR 🤍
-# ✅ Quem estiver no canal pode mandar mensagem/foto
-# ✅ Bot repassa tudo como se fosse ele
-# ✅ /status e /apagar liberados para todos
-# ✅ Suporta texto, fotos, vídeos, arquivos
-# ✅ PYTHON | RAILWAY
+# 🤍 BOT REPASSADOR - CORRIGIDO PARA RAILWAY 🤍
+# ✅ Erro do Client.start() RESOLVIDO
+# ✅ Todos podem usar
+# ✅ Suporta texto + fotos + arquivos
+# ✅ /status e /apagar funcionando
 # ==================================================
 
 load_dotenv()
 
-# ⚙️ CONFIGURAÇÕES
+# ⚙️ VARIÁVEIS (Nomes exatos que você deve colocar no Railway)
 TOKEN = os.getenv("TOKEN")
-CANAL_ORIGEM = int(os.getenv("CANAL_ORIGEM"))
-CANAL_DESTINO = int(os.getenv("CANAL_DESTINO"))
+CANAL_ORIGEM = os.getenv("CANAL_ORIGEM")
+CANAL_DESTINO = os.getenv("CANAL_DESTINO")
 
-# 🚀 INICIALIZAÇÃO
+# 🚨 CONVERTE PARA NÚMERO (era o que estava causando erro)
+try:
+    CANAL_ORIGEM = int(CANAL_ORIGEM)
+    CANAL_DESTINO = int(CANAL_DESTINO)
+except:
+    print("❌ ERRO: IDs dos canais devem ser números!")
+    exit()
+
+# 🚀 INICIALIZAÇÃO CORRETA
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 
-bot = discord.Bot(
-    token=TOKEN,
-    intents=intents,
-    description="Bot que repassa mensagens e arquivos"
-)
+bot = discord.Bot(intents=intents, description="Bot Repassador")
 
 # 📌 VARIÁVEIS GLOBAIS
-ultima_mensagem = None  # Guarda última mensagem (texto OU foto)
+ultima_mensagem = None
 inicio_uptime = time.time()
 
 # ==================================================
-# 📩 FUNÇÃO PRINCIPAL: REPASSA TUDO
+# 📩 FUNÇÃO DE REPASSE
 # ==================================================
 @bot.event
 async def on_message(message: discord.Message):
     global ultima_mensagem
 
-    # Ignora mensagens do próprio bot
     if message.author == bot.user:
         return
 
-    # SE FOR O CANAL DE ORIGEM (QUALQUER UM QUE ESTIVER LÁ PODE MANDAR)
     if message.channel.id == CANAL_ORIGEM:
         canal_destino = bot.get_channel(CANAL_DESTINO)
         if not canal_destino:
-            print("❌ Canal de destino não encontrado!")
+            print("❌ Canal de destino não encontrado")
             return
 
-        # 📝 SE TIVER TEXTO
+        # 📝 Texto
         if message.content:
-            msg_enviada = await canal_destino.send(message.content)
-            ultima_mensagem = msg_enviada  # Salva para apagar depois
+            msg = await canal_destino.send(message.content)
+            ultima_mensagem = msg
 
-        # 🖼️ SE TIVER FOTOS, VÍDEOS OU ARQUIVOS
+        # 🖼️ Arquivos / Fotos
         if message.attachments:
-            lista_arquivos = []
-            for arquivo in message.attachments:
-                lista_arquivos.append(await arquivo.to_file())
+            arquivos = []
+            for arq in message.attachments:
+                arquivos.append(await arq.to_file())
+            msg = await canal_destino.send(files=arquivos)
+            ultima_mensagem = msg
 
-            # Envia TODOS os arquivos de uma vez
-            msg_arquivos = await canal_destino.send(files=lista_arquivos)
-            ultima_mensagem = msg_arquivos  # Salva também para apagar
-
-        # 🗑️ Apaga a mensagem original do canal de origem
+        # 🗑️ Apaga mensagem original
         try:
             await message.delete()
         except:
@@ -76,49 +75,48 @@ async def on_message(message: discord.Message):
     await bot.process_commands(message)
 
 # ==================================================
-# ⚡ SLASH COMMANDS (LIBERADOS PARA TODOS)
+# ⚡ COMANDOS
 # ==================================================
-
-@bot.slash_command(name="status", description="📊 Ver status e funcionamento do bot")
+@bot.slash_command(name="status", description="📊 Ver status do bot")
 async def _status(ctx):
-    tempo_seg = time.time() - inicio_uptime
-    uptime = f"{int(tempo_seg//86400)}d {int((tempo_seg%86400)//3600)}h {int((tempo_seg%3600)//60)}m {int(tempo_seg%60)}s"
+    tempo = time.time() - inicio_uptime
+    up = f"{int(tempo//86400)}d {int((tempo%86400)//3600)}h {int((tempo%3600)//60)}m {int(tempo%60)}s"
 
     emb = discord.Embed(title="🤖 STATUS DO BOT", color=discord.Color.green(), description=f"""
-✅ **Online e funcionando normalmente**
-⏱️ **Tempo ativo:** {uptime}
-📤 **Canal de Origem:** `{CANAL_ORIGEM}`
-📥 **Canal de Destino:** `{CANAL_DESTINO}`
-📸 **Suporte a fotos/arquivos:** ✅ ATIVADO
-👥 **Acesso:** Liberado para todos os membros
+✅ **Online e funcionando**
+⏱️ **Tempo ativo:** {up}
+📤 **Canal Origem:** `{CANAL_ORIGEM}`
+📥 **Canal Destino:** `{CANAL_DESTINO}`
+📸 **Suporte a fotos:** ✅ OK
+👥 **Acesso:** Liberado para todos
     """)
     await ctx.respond(embed=emb)
 
 
-@bot.slash_command(name="apagar", description="🗑️ Apaga a última mensagem/foto enviada pelo bot")
+@bot.slash_command(name="apagar", description="🗑️ Apaga última mensagem enviada")
 async def _apagar(ctx):
     global ultima_mensagem
-
     if not ultima_mensagem:
-        return await ctx.respond("⚠️ Não há nenhuma mensagem minha para apagar!", ephemeral=True)
-
+        return await ctx.respond("⚠️ Nenhuma mensagem para apagar!", ephemeral=True)
     try:
         await ultima_mensagem.delete()
         ultima_mensagem = None
-        await ctx.respond("✅ Última mensagem/arquivo apagada com sucesso!", ephemeral=True)
+        await ctx.respond("✅ Mensagem apagada!", ephemeral=True)
     except:
-        await ctx.respond("❌ Erro ao apagar mensagem!", ephemeral=True)
+        await ctx.respond("❌ Erro ao apagar!", ephemeral=True)
 
 # ==================================================
-# 🚀 INICIAR BOT
+# 🚀 INICIAR (CORREÇÃO PRINCIPAL AQUI)
 # ==================================================
 @bot.event
 async def on_ready():
     print("="*50)
-    print(f"✅ BOT INICIADO COM SUCESSO | {bot.user}")
-    print(f"👥 MODO LIBERADO: Todos do canal podem usar")
-    print(f"📸 ENVIO DE FOTOS/ARQUIVOS: ATIVADO")
+    print(f"✅ BOT INICIADO COM SUCESSO!")
+    print(f"🤖 Nome: {bot.user}")
+    print(f"📤 Origem: {CANAL_ORIGEM} | 📥 Destino: {CANAL_DESTINO}")
     print("="*50)
 
-bot.run()
-      
+# ✅ FORMA CORRETA DE INICIAR (resolve o erro que apareceu)
+if __name__ == "__main__":
+    bot.run(TOKEN)
+        
