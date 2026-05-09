@@ -51,8 +51,8 @@ ultima_mensagem = None
 inicio_uptime = time.time()
 
 # 📌 MENSAGEM DE DIVULGAÇÃO (CORRIGIDA, SEM ERRO)
-MENSAGEM_ANUNCIO = """**tá procurando passe booyah barato?
-aqui você achou!! ofertas imperdíveis somente aqui na MXT STORE, temos o bot de eventos e bot de vendas, então venha comprar aqui na MXT e vire cliente vip 😉"""
+MENSAGEM_ANUNCIO = """**está procurando passe booyah barato?
+aqui você achou!! ofertas imperdíveis somente aqui na MXT STORE, temos o bot de eventos e bot de vendas, então venha comprar aqui na MXT e vire cliente vip 😉** @everyone"""
 
 # ==================================================
 # 🔁 FUNÇÃO: ENVIA ANÚNCIO A CADA 5 MINUTOS
